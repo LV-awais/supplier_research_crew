@@ -1,0 +1,9 @@
+# Garmin Suppliers
+
+| Supplier Name                     | Description                                                                     | Website                                                        | Additional Metadata             |
+|---------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------------------------|---------------------------------|
+| CWR Distribution                 | Distributor of Garmin products.                                                  | [https://cwrdistribution.com/manufacturer/100026/garmin](https://cwrdistribution.com/manufacturer/100026/garmin) | N/A                             |
+| Wintron Electronics              | Provides dealer and marina websites and advertising (may include Garmin).          | [https://wintronelectronics.com/dealer-and-marina-websites-and-advertising/](https://wintronelectronics.com/dealer-and-marina-websites-and-advertising/) | N/A                             |
+| GoBeyond                         | Distributor of Garmin products.                                                  | [https://www.gobeyond.net/distributor-garmin.html](https://www.gobeyond.net/distributor-garmin.html)     | N/A                             |
+| Thames Distribution              | Distributor of Garmin products.  Average customer rating: 3.2/5                     | [https://thamesdistribution.com/vendors/garmin/](https://thamesdistribution.com/vendors/garmin/)         | Average rating: 3.2/5           |
+| Garmin Dealer Locator (Garmin) | Official Garmin dealer locator; allows users to find nearby Garmin retailers. | [https://www.garmin.com/dealerlocator](https://www.garmin.com/dealerlocator)                     | Bad rating: 1.6/5               |

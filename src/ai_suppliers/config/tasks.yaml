@@ -1,0 +1,70 @@
+retrieve_suppliers_task:
+  description: >
+    Use the Serper tool to search for suppliers related to the input topic .
+    The topic is provided by the user (e.g., "Garmin" or any other term).
+    Execute multiple search queries using the input topic, for example:
+      - "{topic} distributors USA"
+    Aggregate the results into a structured dataset including:
+      - **Supplier name and description**
+      - **Main website link**
+      - **Any additional metadata or sitelinks.**
+
+  expected_output: >
+    A structured JSON containing supplier details:
+      - `business_name`
+      - `url`
+      - `description`
+      - `metadata` (if available)
+  agent: retrieve_suppliers  # This agent uses SerperDevTool
+
+domain_and_trustpilot_researcher_task:
+  description: >
+    For each supplier from search results, perform the following:
+      1. Use the CombinedTool to fetch the domain age for the supplier website.
+         - Ensure the input URL is properly formatted.
+         - If a lookup fails due to validation or API errors, record a placeholder ("Check Manually" or "Not Found").
+      2. Retrieve Trustpilot review data by searching for business reviews.
+         - Extract the "og:title" and "AggregateRating" data.
+         - If the information is unavailable, return "N/A".
+  expected_output: >
+    A JSON dictionary mapping each supplier to its research data. For example:
+    {
+      "Supplier Name": {
+        "website_url": "https://www.example.com",
+        "domain_age": "15 years",
+        "trustpilot": {
+          "trustpilot_rating": "4.2/5"
+        }
+      }
+    }
+  agent: domain_researcher_agent
+  input:
+    suppliers_data: retrieve_suppliers_task
+
+
+
+ai_suppliers_write_task:
+  description: >
+    Review the context you have received and expand each topic into a comprehensive section for a report. 
+    The report should include:
+    - Detailed descriptions of each supplier's business model and offerings and other relavant information for supplier research team.
+    - Each supplier's associated URL.
+    - Domain age information for each supplier.
+    - Trustpilot ratings and any other relevant information.
+    Ensure that the report is structured in clear sections, with each supplier having a dedicated section. The sections should provide thorough insights into the supplier's credibility, reputation, and offerings, supported by domain age and Trustpilot data.
+  expected_output: >
+    A well-structured, fully fledged report that includes:
+    - Main sections covering each supplier.
+    - Each supplier's information should include:
+      - **Supplier Name** and **URL**.
+      - **Domain Age** (number of years since the domain registration).
+      - **Trustpilot Rating** and **reviews**, if available.
+    - The report should be formatted as markdown with clear headings, bullet points for ease of reading, and detailed analysis in each section.
+    - Use markdown tables for data like Supplier Name, URL, Domain Age, and Trustpilot Rating for clarity.
+  agent: ai_suppliers_writer
+
+
+
+
+
+
