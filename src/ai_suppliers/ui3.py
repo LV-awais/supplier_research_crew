@@ -1,3 +1,6 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import os
 import sys
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get current script directory
