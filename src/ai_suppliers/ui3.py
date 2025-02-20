@@ -1,5 +1,10 @@
 import os
 import sys
+import os
+
+# Ensure ChromaDB uses system SQLite
+os.environ["ALLOW_CHROMA_DB_SYSTEM_SQLITE"] = "1"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get current script directory
 sys.path.append(os.path.join(BASE_DIR, "src", "ai_suppliers"))
 import re
