@@ -15,7 +15,7 @@ import time
 import threading
 import pandas as pd  # Required for better table handling
 
-from crew_class import  AiSuppliers
+from crewai import  AiSuppliers
 logo_url = os.path.join(BASE_DIR, "search.jpg")
 
 # Set Streamlit page configuration
