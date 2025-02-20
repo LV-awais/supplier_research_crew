@@ -1,3 +1,7 @@
+import os
+import sys
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Get current script directory
+sys.path.append(os.path.join(BASE_DIR, "src", "ai_suppliers"))
 import re
 
 import streamlit as st
@@ -6,13 +10,16 @@ import time
 import threading
 import pandas as pd  # Required for better table handling
 
+from crew_class import  AiSuppliers
+logo_url = os.path.join(BASE_DIR, "search.jpg")
+
 # Set Streamlit page configuration
-st.set_page_config(page_title="Supplier Acquisition Tool", layout="wide", page_icon="search.jpg")
+st.set_page_config(page_title="Supplier Acquisition Tool", layout="wide",page_icon=logo_url)
 
 # ---------------------------
 # Define Logo & Styling
 # ---------------------------
-logo_url = "search.jpg"
+
 
 # Custom CSS to fix spacing and table overflow
 st.markdown(
@@ -151,88 +158,56 @@ selected_country = st.sidebar.selectbox(
     options=all_countries,
     index=0,
 )
-
+status_container = st.empty()
 search_button = st.sidebar.button("Search")
 
+
+def run_crew_process(topic, country):
+    inputs = {"topic": topic, "country": country}
+    st.write("Debug: Running crew process with inputs:", inputs)
+
+    # Call the Crew AI kickoff function directly
+    result = AiSuppliers().crew().kickoff(inputs=inputs)
+    st.write("Debug: Raw crew process result:", result)
+    return result
 # ---------------------------
 # Main Page: Search Logic & Display
 # ---------------------------
 if not user_query.strip():
     st.write("Enter your query in the sidebar and click **Search** to retrieve supplier details.")
-
 if search_button:
     if not user_query.strip():
         st.error("Please enter a valid query.")
     else:
-        result_container = st.empty()
-        status_container = st.empty()
+        status_container.markdown("*Running Crew AI process...*")
 
-        API_URL = "http://localhost:8001/run"
-        # Payload now includes both the query and the selected country
-        payload = {"topic": user_query, "country": selected_country}
+        # Run the Crew AI process
+        result = run_crew_process(user_query, selected_country)
 
-        response_container = {"response": None}
+        # Debug: Print the entire result for troubleshooting purposes
+        # st.write("Debug: Full result dictionary:", result)
 
-        # Function to make the API request
-        def make_request():
-            try:
-
-                response_container["response"] = requests.post(API_URL, json=payload)
-            except Exception as e:
-                response_container["response"] = None
-                st.error(f"An error occurred while calling the API: {e}")
-
-        # Start API call in separate thread
-        request_thread = threading.Thread(target=make_request)
-        request_thread.start()
-
-        spinner_messages = [
-            "Connecting to the supplier database...",
-            "Fetching relevant supplier details...",
-            "Compiling supplier information...",
-            "Analyzing domain metrics...",
-            "Extracting Trustpilot reviews...",
-            "Retrieving ZoomInfo company data...",
-            "Integrating data sources...",
-            "Validating URL formats...",
-            "Performing error checks...",
-            "Finalizing results..."
-        ]
-
-        i = 0
-
-        while request_thread.is_alive():
-            current_message = spinner_messages[i % len(spinner_messages)]
-            status_container.markdown(f"*{current_message}*")
-            time.sleep(6)
-            i += 1
-
-        request_thread.join()
-
-        response = response_container["response"]
-        if response:
-            data = response.json()  # Simulated response as a dict
-            # Extract final answer text from tasks_output if available; otherwise fallback to raw
-            tasks_output = data.get("result", {}).get("tasks_output", [])
-            final_text = tasks_output[-1].get("raw", "") if tasks_output else data.get("result", {}).get("raw", "")
-            final_text = str(final_text).strip()
-            # Remove markdown code block delimiters and compress multiple newlines
-            final_text = final_text.replace("```markdown", "").replace("```", "").strip()
-            final_text = re.sub(r'\n\s*\n', '\n\n', final_text)
-
-            # Convert markdown to HTML so that headers (like # Supplier Research Report) render properly
-            html_text = st.markdown(final_text)
-
-            # Display the final answer box with styling and rendered HTML content
-            st.markdown(f"<div class='final-answer-box'>{html_text}</div>", unsafe_allow_html=True)
-            st.success("Supplier research is completed.")
-
-            # Check for supplier table data and display it if available
-            supplier_data = data.get("suppliers", [])
-            if supplier_data:
-                df = pd.DataFrame(supplier_data)
-                st.dataframe(df, use_container_width=True)
-            else:
-               pass
+        # Extract final answer text based on common keys
+        if "result" in result and "raw" in result["result"]:
+            final_text = result["result"]["raw"]
+            # st.write("Debug: Extracted final_text from result['result']['raw']:", final_text)
+        elif "tasks_output" in result and len(result["tasks_output"]) > 0:
+            final_text = result["tasks_output"][-1].get("raw", "")
+            # st.write("Debug: Extracted final_text from result['tasks_output'][-1]['raw']:", final_text)
         else:
-            st.error("Failed to fetch results from the backend server.")
+            final_text = str(result)
+            # st.write("Debug: Using entire result as final_text:", final_text)
+
+        # Clean the final_text from any markdown code block delimiters and extra newlines
+        final_text = final_text.replace("```markdown", "").replace("```", "").strip()
+        final_text = "\n\n".join([line.strip() for line in final_text.splitlines() if line.strip()])
+
+        # Display the final answer in a styled container
+        st.markdown(f"<div class='final-answer-box'>{final_text}</div>", unsafe_allow_html=True)
+        st.success("Supplier research is completed.")
+
+        # If supplier table data is available in the result, display it
+        supplier_data = result.get("suppliers", [])
+        if supplier_data:
+            df = pd.DataFrame(supplier_data)
+            st.dataframe(df, use_container_width=True)

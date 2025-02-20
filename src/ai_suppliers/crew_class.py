@@ -2,7 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from crewai_tools import SerperDevTool, FirecrawlScrapeWebsiteTool, FileWriterTool,EXASearchTool
 from dotenv import load_dotenv
-from .tools.custom_tool import DomainAgeTool, CustomSerperDevTool,CustomExaTool,CustomTrustpilotTool,CombinedTool
+from tools.custom_tool import DomainAgeTool, CustomSerperDevTool,CustomExaTool,CustomTrustpilotTool,CombinedTool
 
 load_dotenv()
 
@@ -11,8 +11,8 @@ load_dotenv()
 class AiSuppliers():
     """AiSuppliers crew"""
 
-
-
+    def __init__(self):
+        print("AiSuppliers initialized")
     agents_config = 'config/agents.yaml'
     tasks_config = 'config/tasks.yaml'
 

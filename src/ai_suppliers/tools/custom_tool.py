@@ -1,5 +1,8 @@
+import asyncio
 import json
 import os
+import time
+
 import requests
 from crewai.tools import BaseTool
 from typing import Type
@@ -9,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from exa_py import Exa
-
+from scrapfly import ScrapflyClient, ScrapeConfig, ScrapeApiResponse
 # Initialize the Exa tool with your API key
 
 
@@ -66,126 +69,197 @@ import json
 import os
 import requests
 from urllib.parse import urlparse
+scrapfly = ScrapflyClient(key="scp-live-8e13e5e37c4f4161b370861db39e447e")
+
+# Base configuration for Scrapfly requests
+BASE_CONFIG = {
+    "asp": True,      # Helps to avoid Zoominfo blocking
+    "country": "US"   # Sets proxy location to US
+}
+
+def parse_company(response: ScrapeApiResponse) -> dict:
+    """
+    Parse the company page to extract the JSON data.
+    The JSON data is assumed to be in a script tag with an ID of either
+    'app-root-state' or 'ng-state', and the JSON structure contains a key "pageData".
+    """
+    data_text = response.selector.css("script#app-root-state::text").get()
+    if not data_text:
+        data_text = response.selector.css("script#ng-state::text").get()
+    if not data_text:
+        raise ValueError("No company data script found.")
+    data = json.loads(data_text)
+    return data["pageData"]
+
+async def scrape_company(url: str) -> dict:
+    """
+    Asynchronously scrape the given company URL using Scrapfly and return the raw JSON data.
+    """
+    response = await scrapfly.async_scrape(ScrapeConfig(url, **BASE_CONFIG))
+    return parse_company(response)
 
 class CombinedTool(BaseTool):
     name: str = "CombinedTool"
-    description: str = "Fetches domain age for a list of URLs using the Apivoid API and retrieves Trustpilot review data for business names derived from the URLs."
+    description: str = (
+        "Fetches domain age for a list of URLs using the Apivoid API, retrieves Trustpilot review data, "
+        "and scrapes company details from ZoomInfo by leveraging SerperAPI and Scrapfly."
+    )
 
     def _run(self, suppliers: list[dict] = None) -> str:
         """
-        Retrieves domain age details and Trustpilot review data in one run.
+        Retrieves domain age details, Trustpilot review data, and company data in one run.
 
         Parameters:
-            suppliers (list): A list of dictionaries containing business information, including the URL for domain age lookup.
+            suppliers (list): A list of dictionaries containing business information,
+                              including the URL for domain age lookup.
 
         Returns:
-            str: A JSON string containing domain age information and Trustpilot review data.
+            str: A JSON string containing domain age information, Trustpilot review data,
+                 and scraped company data.
         """
         results = {}
 
         if suppliers:
-            api_key = os.getenv("APIVOID_API_KEY", "ea1ced053cb40f986f73516b749e6f488cf3034d")
-            domain_age_results = {}
-            trustpilot_results = {}
+            # Environment variables and headers setup
+            # ea1ced053cb40f986f73516b749e6f488cf3034d(backup)
+
+            apivoid_api_key = os.getenv("APIVOID_API_KEY", "ea1ced053cb40f986f73516b749e6f488cf3034d")
+            serper_api_key = os.getenv("SERPER_API_KEY")
             headers = {
-                "X-API-KEY": os.getenv("SERPER_API_KEY"),
+                "X-API-KEY": serper_api_key,
                 "Content-Type": "application/json"
             }
 
-            # Part 1: Fetch domain ages
+            domain_age_results = {}
+            trustpilot_results = {}
+            company_data_results = {}
+
             for supplier in suppliers:
                 try:
                     url = supplier["url"]
                     parsed_url = urlparse(url)
                     domain_parts = parsed_url.netloc.split('.')
 
-                    # Handling subdomains (e.g., www.example.com -> example.com)
+                    # Handle subdomains (e.g., www.example.com -> example.com)
                     if len(domain_parts) > 2:
                         main_domain = ".".join(domain_parts[-2:])
                     else:
                         main_domain = parsed_url.netloc
 
-                    # Use extracted domain name for Trustpilot searches
+                    # Derive business name (can be adjusted as needed)
                     business_name = main_domain.split('.')[0]
-                    # business_name = supplier['business_name']
-                    # Extract domain from URL
-                    parsed_url = urlparse(url)
-                    host = parsed_url.netloc or url
-                    host = host.split(':')[0]  # Remove port if present
 
-                    # Call the Apivoid API to get domain age
-                    api_url = f"https://endpoint.apivoid.com/domainage/v1/pay-as-you-go/?key={api_key}&host={host}"
-                    response = requests.get(api_url)
+                    # ------------------------------
+                    # Part 1: Domain Age via Apivoid API
+                    # ------------------------------
+                    host = parsed_url.netloc.split(':')[0]  # Remove port if present
+                    apivoid_url = f"https://endpoint.apivoid.com/domainage/v1/pay-as-you-go/?key={apivoid_api_key}&host={host}"
+                    response = requests.get(apivoid_url)
+                    time.sleep(1)
                     response.raise_for_status()
                     data = response.json()
-                    # Simulate domain age response (replace this when enabling API call)
-                    domain_age = data.get('data',{}).get('domain_age_in_years','')  # Placeholder for domain age
-
+                    domain_age = data.get('data', {}).get('domain_age_in_years', '')
                     domain_age_results[url] = domain_age
 
-                    # Part 2: Fetch Trustpilot reviews for extracted business name
-                    search_url = "https://google.serper.dev/search"
-                    search_payload = json.dumps({
+                    # ------------------------------
+                    # Part 2: Trustpilot Reviews via SerperAPI
+                    # ------------------------------
+                    tp_search_payload = json.dumps({
                         "q": f"{business_name} site:trustpilot.com",
                         "num": 10,
                         "location": "United States"
                     })
-                    search_response = requests.post(search_url, headers=headers, data=search_payload)
-                    search_data = search_response.json()
+                    tp_search_url = "https://google.serper.dev/search"
+                    tp_response = requests.post(tp_search_url, headers=headers, data=tp_search_payload)
+                    time.sleep(1)
+                    tp_search_data = tp_response.json()
 
-                    # Find the most relevant Trustpilot link
                     trustpilot_link = None
-                    for result in search_data.get("organic", []):
+                    for result in tp_search_data.get("organic", []):
                         link = result.get("link", "")
                         if "trustpilot.com" in link and business_name.lower() in link.lower():
                             trustpilot_link = link
                             break
 
-                    if not trustpilot_link:
+                    if trustpilot_link:
+                        # Scrape the Trustpilot page
+                        scrape_payload = json.dumps({"url": trustpilot_link})
+                        scrape_url = "https://google.serper.dev/scrape"
+                        scrape_response = requests.post(scrape_url, headers=headers, data=scrape_payload)
+                        time.sleep(1)
+                        scrape_data = scrape_response.json()
+
+                        og_title = scrape_data.get("metadata", {}).get("og:title", "N/A")
+                        aggregate_rating = None
+                        for item in scrape_data.get("jsonld", {}).get("@graph", []):
+                            if item.get("@type") == "AggregateRating":
+                                aggregate_rating = item
+                                break
+                        review_count = aggregate_rating.get("reviewCount") if aggregate_rating else None
+
+                        local_business_info = {}
+                        for item in scrape_data.get("jsonld", {}).get("@graph", []):
+                            if item.get("@type") == "LocalBusiness":
+                                local_business_info = {
+                                    "name": item.get("name"),
+                                    "description": item.get("description"),
+                                    "address": item.get("address", {})
+                                }
+                                break
+
+                        trustpilot_results[business_name] = {
+                            "og_title": og_title,
+                            "aggregate_rating": aggregate_rating,
+                            "review_count": review_count,
+                            "local_business_info": local_business_info
+                        }
+                    else:
                         trustpilot_results[business_name] = {"error": f"No Trustpilot page found for {business_name}."}
-                        continue
 
-                    # Scrape the Trustpilot page for reviews
-                    scrape_url = "https://google.serper.dev/scrape"
-                    scrape_payload = json.dumps({"url": trustpilot_link})
-                    scrape_response = requests.post(scrape_url, headers=headers, data=scrape_payload)
-                    scrape_data = scrape_response.json()
+                    # ------------------------------
+                    # Part 3: Company Data via Scrapfly & ZoomInfo
+                    # ------------------------------
+                    # Use SerperAPI to search for a ZoomInfo URL using the business name
+                    zi_search_payload = json.dumps({
+                        "q": f"{business_name} site:zoominfo.com",
+                        "num": 10,
+                        "location": "United States"
+                    })
+                    zi_search_response = requests.post(tp_search_url, headers=headers, data=zi_search_payload)
+                    zi_search_data = zi_search_response.json()
 
-                    # Extract metadata and review data
-                    og_title = scrape_data.get("metadata", {}).get("og:title", "N/A")
-                    aggregate_rating = None
-                    for item in scrape_data.get("jsonld", {}).get("@graph", []):
-                        if item.get("@type") == "AggregateRating":
-                            aggregate_rating = item
-                            break
-                    review_count = aggregate_rating.get("reviewCount") if aggregate_rating else None
-                    local_business_info = {}
-                    for item in scrape_data.get("jsonld", {}).get("@graph", []):
-                        if item.get("@type") == "LocalBusiness":
-                            local_business_info = {
-                                "name": item.get("name"),
-                                "description": item.get("description"),
-                                "address": item.get("address", {})
-                            }
+                    zoominfo_link = None
+                    for result in zi_search_data.get("organic", []):
+                        link = result.get("link", "")
+                        if "zoominfo.com" in link:
+                            zoominfo_link = link
                             break
 
-                    trustpilot_results[business_name] = {
-                        "og_title": og_title,
-                        "aggregate_rating": aggregate_rating,
-                        "review_count": review_count,
-                        "local_business_info": local_business_info
-                    }
+                    if zoominfo_link:
+                        try:
+                            # Run the asynchronous Scrapfly scraping synchronously.
+                            company_data = asyncio.run(scrape_company(zoominfo_link))
+                        except Exception as scrape_error:
+                            company_data = {"error": f"Scraping failed: {str(scrape_error)}"}
+                    else:
+                        company_data = {"error": f"No ZoomInfo page found for {business_name}."}
+
+                    company_data_results[business_name] = company_data
 
                 except Exception as e:
+                    error_message = f"Error processing supplier {supplier.get('url', 'N/A')}: {str(e)}"
                     domain_age_results[url] = f"Error: {str(e)}"
                     trustpilot_results[business_name] = {"error": str(e)}
+                    company_data_results[business_name] = {"error": str(e)}
 
-            # Combine the results
-            results['domain_age'] = domain_age_results
-            results['trustpilot_reviews'] = trustpilot_results
+            # Aggregate all results into a single JSON structure
+            results = {
+                "domain_age": domain_age_results,
+                "trustpilot_reviews": trustpilot_results,
+                "company_data": company_data_results
+            }
 
         return json.dumps(results, indent=2)
-
 
 class CustomSerperDevTool(BaseTool):
     name: str = "Custom Serper Dev Tool"

@@ -2,7 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-
+from scrapfly import ScrapflyClient, ScrapeConfig, ScrapeApiResponse
 # Import your Crew AI supplier acquisition class.
 from ai_suppliers.crew import AiSuppliers
 
@@ -18,6 +18,7 @@ app = FastAPI(
 
 class RunInput(BaseModel):
     topic: str
+    country:str
 # ------------------------------
 # Run Endpoint
 # ------------------------------
@@ -29,6 +30,7 @@ def run_crew(input_data: RunInput):
     """
     inputs = {
         "topic": input_data.topic,
+        "country":input_data.country
 
     }
     try:

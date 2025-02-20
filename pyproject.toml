@@ -9,6 +9,7 @@ dependencies = [
     "exa-py>=1.8.8",
     "firecrawl-py>=1.11.0",
     "langchain-google-genai>=2.0.9",
+    "scrapfly-sdk[all]>=0.8.21",
 ]
 
 [project.scripts]
