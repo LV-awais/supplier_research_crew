@@ -1,4 +1,7 @@
-import os
+import sys
+if sys.platform == "linux":  # Only apply on Streamlit Cloud (Linux)
+    import pysqlite3
+    sys.modules['sqlite3'] = pysqlite3
 import sys
 import os
 
